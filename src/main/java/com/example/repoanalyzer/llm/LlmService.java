@@ -5,5 +5,9 @@ import com.example.repoanalyzer.dto.LlmAnalysisResult;
 
 public interface LlmService {
 
-    LlmAnalysisResult analyze(AnalysisContext context);
+
+    LlmAnalysisResult analyze(
+            AnalysisContext context,
+            String agentInstructions
+    );
 }
