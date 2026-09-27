@@ -1,3 +1,4 @@
 target/
 .idea/
 *.class
+add-ollama.sh
