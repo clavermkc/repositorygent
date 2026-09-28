@@ -26,6 +26,51 @@ Die Anwendung folgt einer spezialisierten „beweisbasierten Analyse-Pipeline“
 *   **Reduzierte Halluzinationen**: Die Verankerung des LLM in verifizierten technischen Fingerabdrücken (Importe, Methodensignaturen, Manifeste) verhindert, dass es Funktionen erfindet oder leere/irrelevante Dateien missinterpretiert.
 *   **Präzision vor Rauschen**: Der Analysator filtert Rauschen und nicht verwendete Deklarationen heraus und stellt sicher, dass sich das LLM auf Technologien konzentriert, die tatsächlich in der Codebasis verwendet werden.
 
+## Demonstration
+
+Wenn Sie ein Repository wie [Caching-Proxy](https://github.com/clavermkc/Caching-Proxy) analysieren, erstellt der Agent eine strukturierte Ausgabe, die sowohl die technischen Beweise als auch die KI-Analyse enthält:
+
+![Terminal-Analyse-Ausgabe](docs/images/terminal-analysis.png)
+
+```json
+{
+  "evidence": {
+    "projectName": "Caching-Proxy",
+    "language": "Java",
+    "projectStructure": [
+      "README.md",
+      "pom.xml",
+      "src/main/java/com/claver/cachingproxy/CachingProxyApplication.java",
+      "src/main/java/com/claver/cachingproxy/controller/ProxyController.java",
+      "src/main/java/com/claver/cachingproxy/service/ProxyService.java"
+    ],
+    "sourceEvidence": [
+      {
+        "path": "src/main/java/com/claver/cachingproxy/service/ProxyService.java",
+        "imports": [
+          "org.springframework.stereotype.Service",
+          "org.springframework.web.client.RestClient"
+        ],
+        "methods": ["processRequest", "clear"]
+      }
+    ]
+  },
+  "llmAnalysis": {
+    "projectSummary": "Ein Caching-Proxy-Server, der mit Java 21 und Spring Boot erstellt wurde und GET-Anfragen an einen Ursprungsserver weiterleitet, jede Antwort in einem In-Memory-Cache speichert und zwischengespeicherte Antworten für wiederholte Anfragen zurückgibt.",
+    "technologies": [
+      { "name": "Java", "category": "Programmiersprache" },
+      { "name": "Spring Boot", "category": "Framework" },
+      { "name": "Caffeine", "category": "Bibliothek" }
+    ],
+    "skills": [
+      "Implementierung eines Caching-Proxy-Servers mit Java und Spring Boot",
+      "Verwendung von Caffeine für das Caching",
+      "Konfiguration einer Spring Boot-Anwendung"
+    ]
+  }
+}
+```
+
 ## Projektstruktur
 
 *   `com.example.repoanalyzer.agent`: Das „Gehirn“ des Systems. Enthält den Orchestrator (`AgentService`) und die Loader für Anweisungen.

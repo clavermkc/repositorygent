@@ -34,6 +34,51 @@ The application follows a specialized "Evidence-based Analysis" pipeline to mini
 *   `com.example.repoanalyzer.llm`: Interface and implementations for connecting to AI models. It uses `AnalysisPromptBuilder` to translate technical evidence into LLM prompts (Ollama is currently supported).
 *   `com.example.repoanalyzer.web`: REST API entry point.
 
+## Demonstration
+
+When you analyze a repository like [Caching-Proxy](https://github.com/clavermkc/Caching-Proxy), the agent produces a structured output containing both the technical evidence and the AI analysis:
+
+![Terminal Analysis Output](docs/images/terminal-analysis.png)
+
+```json
+{
+  "evidence": {
+    "projectName": "Caching-Proxy",
+    "language": "Java",
+    "projectStructure": [
+      "README.md",
+      "pom.xml",
+      "src/main/java/com/claver/cachingproxy/CachingProxyApplication.java",
+      "src/main/java/com/claver/cachingproxy/controller/ProxyController.java",
+      "src/main/java/com/claver/cachingproxy/service/ProxyService.java"
+    ],
+    "sourceEvidence": [
+      {
+        "path": "src/main/java/com/claver/cachingproxy/service/ProxyService.java",
+        "imports": [
+          "org.springframework.stereotype.Service",
+          "org.springframework.web.client.RestClient"
+        ],
+        "methods": ["processRequest", "clear"]
+      }
+    ]
+  },
+  "llmAnalysis": {
+    "projectSummary": "A caching proxy server built with Java 21 and Spring Boot that forwards GET requests to an origin server, stores each response in an in-memory cache, and returns cached responses for repeated requests.",
+    "technologies": [
+      { "name": "Java", "category": "Programming Language" },
+      { "name": "Spring Boot", "category": "Framework" },
+      { "name": "Caffeine", "category": "Library" }
+    ],
+    "skills": [
+      "Implementing a caching proxy server using Java and Spring Boot",
+      "Using Caffeine for caching",
+      "Configuring a Spring Boot application"
+    ]
+  }
+}
+```
+
 ## Technical Stack
 
 *   **Java 21**
