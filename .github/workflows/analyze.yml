@@ -17,7 +17,7 @@ on:
         default: ''
     secrets:
       CV_DATA_TOKEN:
-        description: Fine-grained token with "Contents: write" on the data repository
+        description: "Fine-grained token with Contents: write on the data repository"
         required: true
 
 # One analysis at a time per repository: a newer push cancels the older run.
