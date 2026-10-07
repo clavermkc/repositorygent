@@ -2,6 +2,8 @@ package com.example.repoanalyzer.llm;
 
 import com.example.repoanalyzer.context.AnalysisContext;
 import com.example.repoanalyzer.dto.LlmAnalysisResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -12,6 +14,8 @@ import java.util.List;
 
 @Service
 public class OllamaLlmService implements LlmService {
+
+    private static final Logger log = LoggerFactory.getLogger(OllamaLlmService.class);
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
@@ -38,14 +42,11 @@ public class OllamaLlmService implements LlmService {
             AnalysisContext context,
             String agentInstructions
     ) {
-    //TODO Add real log
-        System.out.println("[OLLAMA 1] Building prompt...");
-
         String userPrompt = promptBuilder.build(context);
 
-        System.out.println("[OLLAMA 2] Prompt built.");
-        System.out.println("[OLLAMA 2] Prompt characters: " + userPrompt.length());
-        System.out.println("[OLLAMA 2] Estimated tokens: " + (userPrompt.length() / 4));
+        // Rough estimate (~4 chars per token), useful to spot prompts larger than the model context.
+        log.debug("Prompt built: {} chars, ~{} tokens",
+                userPrompt.length(), userPrompt.length() / 4);
 
         OllamaChatRequest request = new OllamaChatRequest(
                 model,
@@ -57,7 +58,8 @@ public class OllamaLlmService implements LlmService {
                 "json"
         );
 
-        System.out.println("[OLLAMA 3] Sending request to Ollama...");
+        log.info("Sending analysis request to Ollama (model: {})", model);
+        long startedAt = System.currentTimeMillis();
 
         JsonNode response = restClient.post()
                 .uri("/api/chat")
@@ -65,9 +67,8 @@ public class OllamaLlmService implements LlmService {
                 .retrieve()
                 .body(JsonNode.class);
 
-        System.out.println("[OLLAMA 4] Ollama response received.");
+        log.info("Ollama responded in {} ms", System.currentTimeMillis() - startedAt);
 
-        // reste du code...
         if (response == null) {
             throw new IllegalStateException("Ollama returned an empty response.");
         }
@@ -80,47 +81,15 @@ public class OllamaLlmService implements LlmService {
             );
         }
 
-        System.out.println("[OLLAMA 4] Ollama response received.");
-
-        System.out.println("[OLLAMA 5] message.content textual: "
-                + messageContent.asString());
-
-        System.out.println("[OLLAMA 5] message.content length: "
-                + messageContent.asString().length());
-
-        System.out.println("[OLLAMA 5] message.content:");
-        System.out.println(messageContent.asString());
-
-        System.out.println("[OLLAMA 6] Parsing LLM result...");
-
-        System.out.println("[OLLAMA 4] Ollama response received.");
-
-
-        System.out.println("[OLLAMA 5] message.content textual: "
-                + messageContent.asString());
-
-        System.out.println("[OLLAMA 5] message.content length: "
-                + messageContent.asString().length());
-
-        System.out.println("[OLLAMA 5] message.content:");
-        System.out.println(messageContent.asString());
-
-        System.out.println("[OLLAMA 6] Parsing LLM result...");
+        log.debug("Ollama raw content ({} chars): {}",
+                messageContent.asString().length(), messageContent.asString());
 
         try {
-            LlmAnalysisResult result = objectMapper.readValue(
+            return objectMapper.readValue(
                     messageContent.asString(),
                     LlmAnalysisResult.class
             );
-
-            System.out.println("[OLLAMA 7] Parsing successful.");
-
-            return result;
-
         } catch (Exception exception) {
-            System.out.println("[OLLAMA 7] Parsing failed.");
-            exception.printStackTrace();
-
             throw new IllegalStateException(
                     "Ollama returned invalid analysis JSON: "
                             + messageContent.asString(),

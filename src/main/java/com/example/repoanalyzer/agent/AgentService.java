@@ -8,89 +8,87 @@ import com.example.repoanalyzer.context.RepositoryData;
 import com.example.repoanalyzer.dto.AnalysisResponse;
 import com.example.repoanalyzer.github.GitHubRepositoryService;
 import com.example.repoanalyzer.llm.LlmService;
+import com.example.repoanalyzer.local.LocalRepositoryService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import java.nio.file.Path;
 
 @Service
 public class AgentService {
 
-private final GitHubRepositoryService githubRepositoryService;
-private final ProjectLanguageDetector languageDetector;
-private final ProjectAnalyzerFactory analyzerFactory;
-private final LlmService llmService;
-private final AgentInstructionsLoader instructionsLoader;
+    private static final Logger log = LoggerFactory.getLogger(AgentService.class);
 
-public AgentService(
-        GitHubRepositoryService githubRepositoryService,
-        ProjectLanguageDetector languageDetector,
-        ProjectAnalyzerFactory analyzerFactory,
-        LlmService llmService,
-        AgentInstructionsLoader instructionsLoader
-) {
-    this.githubRepositoryService = githubRepositoryService;
-    this.languageDetector = languageDetector;
-    this.analyzerFactory = analyzerFactory;
-    this.llmService = llmService;
-    this.instructionsLoader = instructionsLoader;
-}
+    private final GitHubRepositoryService githubRepositoryService;
+    private final LocalRepositoryService localRepositoryService;
+    private final ProjectLanguageDetector languageDetector;
+    private final ProjectAnalyzerFactory analyzerFactory;
+    private final LlmService llmService;
+    private final AgentInstructionsLoader instructionsLoader;
+
+    public AgentService(
+            GitHubRepositoryService githubRepositoryService,
+            LocalRepositoryService localRepositoryService,
+            ProjectLanguageDetector languageDetector,
+            ProjectAnalyzerFactory analyzerFactory,
+            LlmService llmService,
+            AgentInstructionsLoader instructionsLoader
+    ) {
+        this.githubRepositoryService = githubRepositoryService;
+        this.localRepositoryService = localRepositoryService;
+        this.languageDetector = languageDetector;
+        this.analyzerFactory = analyzerFactory;
+        this.llmService = llmService;
+        this.instructionsLoader = instructionsLoader;
+    }
+
+    /**
+     * Analyzes a remote repository through the GitHub API (REST endpoint).
+     */
     public AnalysisResponse analyze(String repositoryUrl) {
+        log.info("Analysis started for {}", repositoryUrl);
+        return analyze(githubRepositoryService.loadRepository(repositoryUrl));
+    }
 
-        System.out.println();
-        System.out.println("========== AGENT START ==========");
-        System.out.println("Repository URL: " + repositoryUrl);
+    /**
+     * Analyzes a repository already present on disk (e.g. checked out by GitHub Actions).
+     */
+    public AnalysisResponse analyzeLocal(Path directory, String projectName) {
+        log.info("Analysis started for local directory {}", directory);
+        return analyze(localRepositoryService.loadRepository(directory, projectName));
+    }
 
-        System.out.println("[1] Loading GitHub repository...");
-
-        RepositoryData repository =
-                githubRepositoryService.loadRepository(repositoryUrl);
-
-        System.out.println("[2] GitHub repository loaded.");
-        System.out.println("Repository files: " + repository.files().size());
-
-        System.out.println("[3] Detecting language...");
+    private AnalysisResponse analyze(RepositoryData repository) {
+        long startedAt = System.currentTimeMillis();
+        log.debug("Repository loaded: {} files", repository.files().size());
 
         String language =
                 languageDetector.detect(repository);
 
-        System.out.println("[4] Language detected: " + language);
-
-        System.out.println("[5] Selecting analyzer...");
-
         ProjectAnalyzer analyzer =
                 analyzerFactory.getAnalyzer(language);
-
-        System.out.println("[6] Analyzer selected: "
-                + analyzer.getClass().getSimpleName());
-
-        System.out.println("[7] Analyzing repository...");
+        log.info("Language detected: {} (analyzer: {})",
+                language, analyzer.getClass().getSimpleName());
 
         AnalysisContext context =
                 analyzer.analyze(repository);
-
-        System.out.println("[8] Repository analyzed.");
-
-        System.out.println("Project: " + context.projectName());
-        System.out.println("Root files: " + context.rootFiles().size());
-        System.out.println("Source evidence: " + context.sourceEvidence().size());
-        System.out.println("Dependency files: " + context.dependencyFiles().size());
-
-        System.out.println("[9] Loading agent instructions...");
+        log.debug("Evidence collected for {}: {} root files, {} source files, {} dependency files",
+                context.projectName(),
+                context.rootFiles().size(),
+                context.sourceEvidence().size(),
+                context.dependencyFiles().size());
 
         String instructions =
                 instructionsLoader.load();
-
-        System.out.println("[10] Agent instructions loaded.");
-
-        System.out.println("[11] Calling Ollama...");
 
         AnalysisResponse response = new AnalysisResponse(
                 context,
                 llmService.analyze(context, instructions)
         );
 
-        System.out.println("[12] Ollama response received.");
-
-        System.out.println("========== AGENT END ==========");
-        System.out.println();
+        log.info("Analysis finished for {} in {} ms",
+                repository.repository(), System.currentTimeMillis() - startedAt);
 
         return response;
     }
