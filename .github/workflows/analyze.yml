@@ -1,0 +1,124 @@
+# Reusable workflow: analyzes the repository that calls it and stores the
+# result as analyses/<repo>.json in the data repository (default: <owner>/cv-data).
+#
+# The calling repository only needs docs/caller-workflow.yml.
+name: Analyze repository
+
+on:
+  workflow_call:
+    inputs:
+      model:
+        description: Ollama model used for the analysis
+        type: string
+        default: llama3.2
+      data-repository:
+        description: Repository storing the analyses (default <owner>/cv-data)
+        type: string
+        default: ''
+    secrets:
+      CV_DATA_TOKEN:
+        description: Fine-grained token with "Contents: write" on the data repository
+        required: true
+
+# One analysis at a time per repository: a newer push cancels the older run.
+concurrency:
+  group: repository-analysis-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATA_REPOSITORY: ${{ inputs.data-repository || format('{0}/cv-data', github.repository_owner) }}
+      OLLAMA_MODELS: ${{ github.workspace }}/.ollama-models
+
+    steps:
+      - name: Checkout analyzed repository
+        uses: actions/checkout@v4
+        with:
+          path: target-repo
+
+      - name: Checkout agent
+        uses: actions/checkout@v4
+        with:
+          repository: clavermkc/repositorygent
+          path: agent
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: agent/pom.xml
+
+      - name: Build agent
+        working-directory: agent
+        run: mvn -B -q -DskipTests package
+
+      - name: Restore Ollama model cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.OLLAMA_MODELS }}
+          key: ollama-${{ inputs.model }}
+
+      - name: Install and start Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          # The installer may start a systemd service; we run our own server
+          # instead, so that models go to the cached OLLAMA_MODELS directory.
+          sudo systemctl stop ollama 2>/dev/null || true
+          nohup ollama serve > ollama.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:11434 > /dev/null && exit 0
+            sleep 1
+          done
+          echo "Ollama did not start" && cat ollama.log && exit 1
+
+      - name: Pull model
+        run: ollama pull ${{ inputs.model }}
+
+      - name: Run analysis
+        run: |
+          java -jar agent/target/*.jar \
+            --spring.main.web-application-type=none \
+            --analysis.path=target-repo \
+            --analysis.name=${{ github.event.repository.name }} \
+            --analysis.output=analysis.json \
+            --ollama.model=${{ inputs.model }}
+
+      - name: Checkout data repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATA_REPOSITORY }}
+          token: ${{ secrets.CV_DATA_TOKEN }}
+          path: cv-data
+
+      - name: Commit analysis
+        working-directory: cv-data
+        run: |
+          mkdir -p analyses
+          cp ../analysis.json "analyses/${{ github.event.repository.name }}.json"
+          git config user.name "repository-agent[bot]"
+          git config user.email "repository-agent@users.noreply.github.com"
+          git add analyses
+          if git diff --cached --quiet; then
+            echo "Analysis unchanged, nothing to commit."
+            exit 0
+          fi
+          git commit -m "analysis: ${{ github.repository }}@${GITHUB_SHA::7}"
+          # Two repositories may push to cv-data at the same time: retry on conflict.
+          for i in 1 2 3; do
+            git pull --rebase && git push && exit 0
+            sleep $((i * 5))
+          done
+          exit 1
+
+      - name: Upload Ollama log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ollama-log
+          path: ollama.log
+          if-no-files-found: ignore

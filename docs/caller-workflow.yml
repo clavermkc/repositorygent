@@ -1,0 +1,13 @@
+# Copy this file to .github/workflows/repository-analysis.yml in every
+# repository you want to appear in your CV.
+name: Repository analysis
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  analyze:
+    uses: clavermkc/repositorygent/.github/workflows/analyze.yml@main
+    secrets:
+      CV_DATA_TOKEN: ${{ secrets.CV_DATA_TOKEN }}
